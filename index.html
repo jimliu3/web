@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RD 遠端管理系統 (Jira-Lite & Schedule Planner)</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+  <!-- 頂部導覽列 -->
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+      </svg>
+      <span>RD Sync Hub</span>
+    </div>
+    
+    <!-- 導覽連結 (將由 JS 依據登入身分動態控制) -->
+    <ul class="nav-links" id="navbar-links" style="display: none;">
+      <!-- 動態載入選單項目 -->
+    </ul>
+
+    <!-- 用戶狀態與登出 -->
+    <div class="user-badge" id="user-badge" style="display: none;">
+      <div class="avatar" id="user-avatar">-</div>
+      <span id="user-name">用戶名</span>
+      <button class="btn-logout" id="btn-logout" title="登出">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+        </svg>
+        登出
+      </button>
+    </div>
+  </header>
+
+  <!-- 主要內容區塊 -->
+  <main>
+    
+    <!-- ==================== 1. 登入與註冊頁面 ==================== -->
+    <div id="auth-view" class="view-panel active">
+      <div class="auth-container">
+        <div class="glass-card auth-card">
+          <div class="auth-tabs">
+            <div class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">帳號登入</div>
+            <div class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">RD 自行註冊</div>
+          </div>
+
+          <!-- 登入表單 -->
+          <form id="form-login" onsubmit="handleLogin(event)">
+            <div class="form-group">
+              <label for="login-email">電子信箱</label>
+              <input type="email" id="login-email" class="form-control" placeholder="name@company.com" required>
+            </div>
+            <div class="form-group">
+              <label for="login-password">密碼</label>
+              <input type="password" id="login-password" class="form-control" placeholder="請輸入密碼" required>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">登入系統</button>
+            <div style="margin-top: 0.75rem; text-align: right; font-size: 0.85rem;">
+              <a href="#" onclick="openForgotPasswordModal(event)" style="color: var(--primary); text-decoration: underline; font-weight: 500;">忘記密碼？</a>
+            </div>
+            <div style="margin-top: 1.5rem; text-align: center; font-size: 0.85rem; color: var(--text-muted);">
+              <p>💡 測試帳號快速登入：</p>
+              <p style="margin-top: 0.25rem;">管理者: <strong>manager@company.com</strong> / password</p>
+              <p>研發人員 (RD): <strong>rd1@company.com</strong> / password</p>
+            </div>
+          </form>
+
+          <!-- 註冊表單 -->
+          <form id="form-register" onsubmit="handleRegister(event)" style="display: none;">
+            <div class="form-group">
+              <label for="reg-name">姓名</label>
+              <input type="text" id="reg-name" class="form-control" placeholder="例如：張小明" required>
+            </div>
+            <div class="form-group">
+              <label for="reg-email">電子信箱</label>
+              <input type="email" id="reg-email" class="form-control" placeholder="name@company.com" required>
+            </div>
+            <div class="form-group">
+              <label for="reg-password">設定密碼</label>
+              <input type="password" id="reg-password" class="form-control" placeholder="至少 6 位字元" required>
+            </div>
+            <div class="form-group">
+              <label for="reg-confirm">確認密碼</label>
+              <input type="password" id="reg-confirm" class="form-control" placeholder="請再次輸入密碼" required>
+            </div>
+            <button type="submit" class="btn btn-success" style="width: 100%; margin-top: 1rem;">完成註冊並登入</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 2. 管理者：首頁儀表板 ==================== -->
+    <div id="mgr-dashboard-view" class="view-panel">
+      <div class="glass-card">
+        <h1>管理者工作區</h1>
+        <p class="subtitle">即時掌握團隊進度、Blockers 阻礙與開會時段規劃。</p>
+        
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-value" id="stat-rd-count">0</span>
+            <span class="stat-label">團隊研發人員 (RD)</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value" id="stat-project-count">0</span>
+            <span class="stat-label">進行中專案數</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value" id="stat-task-count">0</span>
+            <span class="stat-label">子細目任務總量</span>
+          </div>
+          <div class="stat-card" style="border-color: rgba(239, 68, 68, 0.3);">
+            <span class="stat-value" id="stat-blocker-count" style="color: var(--danger);">0</span>
+            <span class="stat-label">未解決阻礙問題 (Blockers)</span>
+          </div>
+        </div>
+
+        <div class="dashboard-cols">
+          <!-- 團隊行程與報告填寫狀態 -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+              <h2 style="margin-bottom: 0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                團隊成員管理與狀態
+              </h2>
+              <button class="btn btn-sm btn-primary" onclick="openAddRdModal()">+ 新增 RD 帳號</button>
+            </div>
+            <div class="team-list" id="team-status-list">
+              <!-- JS 動態渲染 RD 行程與週報狀態 -->
+            </div>
+          </div>
+          
+          <!-- 最近系統動態 -->
+          <div>
+            <h2>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              最近活動日誌
+            </h2>
+            <div class="activity-feed" id="activity-log">
+              <!-- JS 動態渲染 -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 3. 管理者：會議熱圖推薦 ==================== -->
+    <div id="mgr-heatmap-view" class="view-panel">
+      <div class="glass-card">
+        <div class="schedule-controls">
+          <div>
+            <h1>團隊行程熱圖 (Heatmap)</h1>
+            <p class="subtitle" style="margin-bottom: 0;">系統會重疊所有 RD 標記的忙碌/空閒時段，為您推薦最適合安排會議的時間。</p>
+          </div>
+          <div class="week-selector-container">
+            <label for="heatmap-week-select" style="font-weight: 600; color: var(--text-muted);">選擇週別：</label>
+            <select id="heatmap-week-select" class="form-control" style="width: auto;" onchange="renderHeatmap()">
+              <!-- JS 動態載入週數 -->
+            </select>
+          </div>
+        </div>
+
+        <div class="calendar-legend" style="margin-bottom: 1.5rem;">
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: var(--slot-free);"></div>
+            <span>灰：RD 正常工作 (未標記)</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger);"></div>
+            <span>紅：有人有會議 (不建議開會)</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: rgba(16, 185, 129, 0.08); border: 1px dashed var(--success);"></div>
+            <span>淺綠：有人有課程需要上課</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color" style="background-color: var(--success-glow); border: 1px solid var(--success);"></div>
+            <span>深綠高亮：全員空閒 (最適合開會)</span>
+          </div>
+        </div>
+
+        <!-- 熱圖 Grid -->
+        <div class="heatmap-board">
+          <div class="calendar-grid" id="heatmap-grid">
+            <!-- 由 JS 渲染 -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 4. 管理者與 RD 共用：專案看板 (Jira-Lite) ==================== -->
+    <div id="projects-view" class="view-panel">
+      <div class="glass-card">
+        <div class="jira-top-bar">
+          <div>
+            <h1 id="project-board-title">專案任務看板 (Jira-Lite)</h1>
+            <p class="subtitle" id="project-board-subtitle" style="margin-bottom: 0;">在此建立專案、管理子細目任務，並追蹤 Bug 或測試進度。</p>
+          </div>
+          
+          <div class="board-filters">
+            <!-- 專案切換下拉選單 -->
+            <div class="form-group" style="margin-bottom: 0; display: flex; align-items: center; gap: 0.5rem;">
+              <label for="project-select" style="margin-bottom: 0; white-space: nowrap;">切換專案：</label>
+              <select id="project-select" class="form-control" style="width: 200px;" onchange="handleProjectChange()">
+                <!-- 動態載入專案 -->
+              </select>
+            </div>
+            
+            <!-- 管理者獨有按鈕 -->
+            <button class="btn btn-primary" id="btn-create-project" onclick="openCreateProjectModal()" style="display: none;">
+              + 新增專案
+            </button>
+            <button class="btn btn-secondary" id="btn-manage-members" onclick="openManageMembersModal()" style="display: none;">
+              成員管理
+            </button>
+            <button class="btn btn-success" id="btn-create-task" onclick="openCreateTaskModal()" style="display: none;">
+              + 新增任務細目
+            </button>
+            <button class="btn btn-danger" id="btn-delete-project" onclick="handleDeleteProject()" style="display: none;">
+              刪除專案
+            </button>
+          </div>
+        </div>
+
+        <!-- 專案基本介紹與成員 -->
+        <div id="project-info-banner" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <span style="font-weight: 600; color: var(--text-muted);">專案描述：</span>
+            <span id="project-desc-text">尚未選擇專案</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-weight: 600; color: var(--text-muted);">專案成員：</span>
+            <div id="project-members-list" style="display: flex; gap: 0.25rem;">
+              <!-- 顯示成員 Avatar -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 看板 Board 4行 -->
+        <div class="kanban-board">
+          <!-- 待辦事項 (To Do) -->
+          <div class="kanban-column">
+            <div class="column-header todo">
+              <span>待處理 (To Do)</span>
+              <span class="column-count" id="count-todo">0</span>
+            </div>
+            <div class="column-cards" id="col-todo" ondragover="allowDrop(event)" ondrop="drop(event, 'todo')">
+              <!-- 卡片動態置入 -->
+            </div>
+          </div>
+
+          <!-- 進行中 (In Progress) -->
+          <div class="kanban-column">
+            <div class="column-header inprogress">
+              <span>進行中 (In Progress)</span>
+              <span class="column-count" id="count-inprogress">0</span>
+            </div>
+            <div class="column-cards" id="col-inprogress" ondragover="allowDrop(event)" ondrop="drop(event, 'inprogress')">
+              <!-- 卡片動態置入 -->
+            </div>
+          </div>
+
+          <!-- 測試/評審中 (In Review / Testing) -->
+          <div class="kanban-column">
+            <div class="column-header review">
+              <span>測試與評審 (Review)</span>
+              <span class="column-count" id="count-review">0</span>
+            </div>
+            <div class="column-cards" id="col-review" ondragover="allowDrop(event)" ondrop="drop(event, 'review')">
+              <!-- 卡片動態置入 -->
+            </div>
+          </div>
+
+          <!-- 已完成 (Completed) -->
+          <div class="kanban-column">
+            <div class="column-header done">
+              <span>已完成 (Done)</span>
+              <span class="column-count" id="count-done">0</span>
+            </div>
+            <div class="column-cards" id="col-done" ondragover="allowDrop(event)" ondrop="drop(event, 'done')">
+              <!-- 卡片動態置入 -->
+            </div>
+          </div>
+        </div>
+      
+      <!-- ==================== 任務更新日誌 ==================== -->
+      <div class="glass-card" id="task-update-log-container" style="margin-top: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+          <h2 style="margin-bottom: 0; display: flex; align-items: center; gap: 0.6rem;">
+            <svg style="width: 24px; height: 24px; fill: none; stroke: var(--primary); stroke-width: 2;" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            任務更新日誌
+          </h2>
+          <!-- 日誌過濾 Tab / 切換按鈕 -->
+          <div style="display: flex; background: rgba(255, 255, 255, 0.05); padding: 0.25rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <div id="log-filter-all" class="role-option active" style="padding: 0.35rem 1rem; font-size: 0.85rem;" onclick="setLogFilter('all')">所有更新</div>
+            <div id="log-filter-mine" class="role-option" style="padding: 0.35rem 1rem; font-size: 0.85rem;" onclick="setLogFilter('mine')">與我相關</div>
+          </div>
+        </div>
+        <div class="activity-feed" id="project-task-updates" style="max-height: 350px;">
+          <!-- 由 JS 渲染 -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <!-- ==================== 5. RD：標記與上傳個人行程 ==================== -->
+    <div id="rd-schedule-view" class="view-panel">
+      <div class="glass-card">
+        <div class="schedule-controls">
+          <div>
+            <h1>編輯我的工作行程</h1>
+            <p class="subtitle" style="margin-bottom: 0;">請設定週一至週五，早上 8 點到下午 5 點的狀態。直接點擊格子可以循環切換行程狀態。</p>
+          </div>
+          
+          <div class="week-selector-container">
+            <label for="rd-week-select" style="font-weight: 600; color: var(--text-muted);">選擇週別：</label>
+            <select id="rd-week-select" class="form-control" style="width: auto;" onchange="handleRdWeekChange()">
+              <!-- 動態產生週 -->
+            </select>
+            <button class="btn btn-primary" onclick="saveRdSchedule()">儲存本週行程</button>
+          </div>
+        </div>
+
+        <div class="calendar-legend" style="margin-bottom: 1.5rem;">
+          <div class="legend-item">
+            <div class="legend-color free"></div>
+            <span>正常工作時段 (預設)</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color busy"></div>
+            <span>有會議 / 忙碌 (阻礙同步)</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color sync"></div>
+            <span>有課程需要上課</span>
+          </div>
+        </div>
+
+        <!-- RD 編輯日曆 Grid -->
+        <div class="calendar-grid" id="rd-schedule-grid">
+          <!-- JS 渲染日曆 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 6. RD：撰寫週報與阻礙回報 ==================== -->
+    <div id="rd-report-view" class="view-panel">
+      <div class="glass-card">
+        <h1>撰寫本週進度報告</h1>
+        <p class="subtitle">填寫您本週的進度，以及目前遇到的困難問題 (Blockers)，方便 Manager 協助協調與解決。</p>
+        
+        <form onsubmit="submitWeeklyReport(event)">
+          <div class="form-group" style="width: 250px;">
+            <label for="report-week-select">選擇報告週別</label>
+            <select id="report-week-select" class="form-control" onchange="loadUserReportByWeek()">
+              <!-- 週別 -->
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="report-progress">1. 本週專案進度與產出</label>
+            <textarea id="report-progress" class="form-control" rows="5" placeholder="請詳細列出本週完成的事項、專案子細目的更新等..." required></textarea>
+          </div>
+
+          <div class="form-group" style="border-left: 4px solid var(--danger); padding-left: 1rem;">
+            <label for="report-problems" style="color: #fca5a5;">2. 目前遇到的困難與問題 (Blockers) - 沒有請填「無」</label>
+            <textarea id="report-problems" class="form-control" rows="4" placeholder="是否有遇到技術瓶頸、外部依賴阻礙、規格不明確等？這將直接警示 Manager。" required></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="report-custom">3. 自行補充說明 / 建議或資源需求</label>
+            <textarea id="report-custom" class="form-control" rows="3" placeholder="例如：需要採購某個 SDK、希望與特定人員開會討論等..."></textarea>
+          </div>
+
+          <!-- 週報附件上傳與展示 -->
+          <div class="form-group" style="border-left: 4px solid var(--primary); padding-left: 1rem; margin-top: 1.5rem; margin-bottom: 1.5rem;">
+            <label style="color: var(--primary); font-weight: 600;">4. 週報附件 (Report Attachment)</label>
+            <div class="attachment-upload-zone" id="report-attachment-upload-zone" ondragover="handleReportDragOver(event)" ondrop="handleReportFileDrop(event)" style="margin-top: 0.5rem;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom: 0.5rem; opacity: 0.7;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+              </svg>
+              <div style="font-size: 0.85rem; color: var(--text-muted);">
+                拖曳檔案至此或 <span class="upload-link" onclick="document.getElementById('report-file-input').click()" style="color: var(--primary); cursor: pointer; text-decoration: underline; font-weight: 500;">點擊上傳</span>
+              </div>
+              <input type="file" id="report-file-input" style="display: none;" onchange="handleReportFileSelect(event)">
+            </div>
+            <div id="report-attachment-display" style="margin-top: 1rem; display: none;">
+              <!-- 顯示上傳後的檔案卡片 -->
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-success">送出週報</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ==================== 7. 管理者：審閱團隊週報與問題 ==================== -->
+    <div id="mgr-reports-view" class="view-panel">
+      <div class="glass-card">
+        <div class="schedule-controls">
+          <div>
+            <h1>團隊週報與問題審查</h1>
+            <p class="subtitle" style="margin-bottom: 0;">在此查看所有 RD 的週報，當 RD 填寫阻礙問題 (Blocker) 時系統會特別標記，您可以直接回覆回饋。</p>
+          </div>
+          <div class="week-selector-container">
+            <label for="review-week-select" style="font-weight: 600; color: var(--text-muted);">選擇週別：</label>
+            <select id="review-week-select" class="form-control" style="width: auto;" onchange="renderReportsReview()">
+              <!-- 週數 -->
+            </select>
+          </div>
+        </div>
+
+        <div id="reports-review-container" style="margin-top: 1.5rem;">
+          <!-- JS 動態產生週報清單 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 8. 系統設定：備份與還原 ==================== -->
+    <div id="settings-view" class="view-panel">
+      <div class="glass-card">
+        <h1>系統設定與備份還原</h1>
+        <p class="subtitle">本系統已連接 Supabase 雲端資料庫。為了保障資料安全，建議定期匯出備份壓縮檔。</p>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 1rem;">
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 1.5rem; border-radius: var(--radius-sm);">
+            <h3 style="margin-bottom: 1rem;">匯出專案備份</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">將雲端資料庫中的所有用戶、專案、任務看板、會議時段、週報及上傳的原始附件，打包成一個 ZIP 壓縮檔下載至您的電腦。</p>
+            <button class="btn btn-primary" onclick="exportSystemData()">匯出備份 ZIP 檔案</button>
+          </div>
+
+          <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 1.5rem; border-radius: var(--radius-sm);">
+            <h3 style="margin-bottom: 1rem;">匯入資料還原</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">選擇您之前匯出的 ZIP 備份檔案。還原時將會**完全覆蓋**目前的雲端資料庫。系統在開始前會自動為您備份一份當前資料。</p>
+            <div class="form-group">
+              <input type="file" id="import-file-input" class="form-control" accept=".zip">
+            </div>
+            <button class="btn btn-danger" onclick="importSystemData()">匯入備份並還原</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ==================== 彈出視窗 1：建立新專案 Modal ==================== -->
+  <div class="modal-overlay" id="modal-create-project">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">新增專案</h3>
+        <button class="btn-close-modal" onclick="closeModal('modal-create-project')">&times;</button>
+      </div>
+      <form onsubmit="handleCreateProject(event)">
+        <div class="form-group">
+          <label for="new-project-name">專案名稱</label>
+          <input type="text" id="new-project-name" class="form-control" placeholder="例如：AI 整合平台" required>
+        </div>
+        <div class="form-group">
+          <label for="new-project-desc">專案描述</label>
+          <textarea id="new-project-desc" class="form-control" rows="3" placeholder="簡短說明專案目標與方向..." required></textarea>
+        </div>
+        <div class="form-group">
+          <label style="color: var(--text-main); font-weight: 600;">選擇專案成員 (RD) <span style="color: var(--danger);">*</span></label>
+          <div id="create-project-members-group" style="display: flex; flex-direction: column; gap: 0.75rem; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); max-height: 200px; overflow-y: auto; margin-top: 0.5rem;">
+            <!-- 勾選框動態生成 -->
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-create-project')">取消</button>
+          <button type="submit" class="btn btn-primary">確認建立</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== 彈出視窗 2：專案成員管理 Modal ==================== -->
+  <div class="modal-overlay" id="modal-manage-members">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="member-modal-title">專案成員管理</h3>
+        <button class="btn-close-modal" onclick="closeModal('modal-manage-members')">&times;</button>
+      </div>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">勾選以將研發人員 (RD) 加入或移出此專案：</p>
+      <form onsubmit="handleSaveMembers(event)">
+        <div id="members-checkbox-group" style="display: flex; flex-direction: column; gap: 0.75rem; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); max-height: 250px; overflow-y: auto;">
+          <!-- 勾選框動態生成 -->
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-manage-members')">取消</button>
+          <button type="submit" class="btn btn-primary">儲存變更</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== 彈出視窗 3：建立專案子細目任務 Modal ==================== -->
+  <div class="modal-overlay" id="modal-create-task">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">新增子細目任務</h3>
+        <button class="btn-close-modal" onclick="closeModal('modal-create-task')">&times;</button>
+      </div>
+      <form onsubmit="handleCreateTask(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="task-type">任務類型</label>
+            <select id="task-type" class="form-control" onchange="toggleTaskTypeFields()" required>
+              <option value="task">一般任務 (Task)</option>
+              <option value="bug">錯誤除錯 (Bug)</option>
+              <option value="test">測試功能 (Test)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="task-priority">優先權</label>
+            <select id="task-priority" class="form-control" required>
+              <option value="medium">中 (Medium)</option>
+              <option value="high">高 (High)</option>
+              <option value="low">低 (Low)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="task-title">任務標題 / 細目名稱</label>
+          <input type="text" id="task-title" class="form-control" placeholder="請輸入任務名稱" required>
+        </div>
+
+        <div class="form-group">
+          <label for="task-desc">基本描述與說明</label>
+          <textarea id="task-desc" class="form-control" rows="3" placeholder="請描述任務的工作細項..." required></textarea>
+        </div>
+
+        <!-- 欄位 A：Bug 類型專屬欄位 -->
+        <div id="bug-fields" class="detail-section" style="display: none; border-color: rgba(239,68,68,0.2);">
+          <div class="detail-section-title" style="color: var(--danger);">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="10" rx="2" ry="2"/>
+              <path d="M12 2v9M8 5h8"/>
+            </svg>
+            Bug 詳細資料
+          </div>
+          <div class="form-group">
+            <label for="bug-steps">重現步驟 (Steps to Reproduce)</label>
+            <textarea id="bug-steps" class="form-control" rows="2" placeholder="1. 點擊登入頁&#10;2. 輸入空白信箱..."></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="bug-env">測試環境 (Environment)</label>
+              <input type="text" id="bug-env" class="form-control" placeholder="例如：iOS Chrome v112">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label for="bug-severity">嚴重程度 (Severity)</label>
+              <select id="bug-severity" class="form-control">
+                <option value="major">Major (嚴重)</option>
+                <option value="critical">Critical (致命阻礙)</option>
+                <option value="minor">Minor (輕微)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- 欄位 B：測試類型專屬欄位 -->
+        <div id="test-fields" class="detail-section" style="display: none; border-color: rgba(14,165,233,0.2);">
+          <div class="detail-section-title" style="color: var(--info);">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            測試規格與驗證
+          </div>
+          <div class="form-group">
+            <label for="test-cases">測試案例 (Test Cases / Checklist)</label>
+            <textarea id="test-cases" class="form-control" rows="2" placeholder="- 驗證密碼小於6位會跳警告&#10;- 驗證重複信箱註冊失敗..."></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="test-platform">覆蓋平台 (Target Platforms)</label>
+            <input type="text" id="test-platform" class="form-control" placeholder="例如：Web, Android, iOS">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label style="color: var(--text-main); font-weight: 600;">指派對象 (可複選指派多個 RD) <span style="color: var(--danger);">*</span></label>
+          <div id="task-assignee-group" style="display: flex; flex-wrap: wrap; gap: 0.75rem; background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); max-height: 150px; overflow-y: auto; margin-top: 0.5rem;">
+            <!-- 勾選框動態生成 -->
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-create-task')">取消</button>
+          <button type="submit" class="btn btn-success">新增細目</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== 彈出視窗 4：任務細節與留言 Modal ==================== -->
+  <div class="modal-overlay" id="modal-task-detail">
+    <div class="modal-content" style="max-width: 700px;">
+      <div class="modal-header">
+        <div>
+          <span class="task-badge" id="detail-task-type-badge">TASK</span>
+          <span style="color: var(--text-muted); font-size: 0.9rem; margin-left: 0.5rem;" id="detail-task-id">#TASK-101</span>
+        </div>
+        <button class="btn-close-modal" onclick="closeModal('modal-task-detail')">&times;</button>
+      </div>
+
+      <h2 id="detail-task-title" style="margin-bottom: 0.5rem; display: block; font-size: 1.6rem;">任務標題載入中...</h2>
+      
+      <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; font-size: 0.9rem;">
+        <div>
+          <span style="color: var(--text-muted);">狀態：</span>
+          <select id="detail-task-status" class="form-control" style="width: auto; display: inline-block; padding: 0.25rem 0.5rem; font-size: 0.85rem;" onchange="updateTaskStatusFromDetail()">
+            <option value="todo">待處理 (To Do)</option>
+            <option value="inprogress">進行中 (In Progress)</option>
+            <option value="review">測試與評審 (Review)</option>
+            <option value="done">已完成 (Done)</option>
+          </select>
+        </div>
+        <div>
+          <span style="color: var(--text-muted);">優先權：</span>
+          <span id="detail-task-priority-val">Medium</span>
+        </div>
+        <div>
+          <span style="color: var(--text-muted);">指派給：</span>
+          <span id="detail-task-assignee-val">RD 姓名</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>任務描述說明</label>
+        <div id="detail-task-desc" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 1rem; font-size: 0.95rem; white-space: pre-wrap; margin-bottom: 1rem;">
+          任務詳細說明描述...
+        </div>
+      </div>
+
+      <!-- Bug 專屬詳情與編輯 -->
+      <div id="detail-bug-section" class="detail-section" style="display: none; border-color: rgba(239,68,68,0.2);">
+        <div class="detail-section-title" style="color: var(--danger);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="10" rx="2" ry="2"/>
+            <path d="M12 2v9M8 5h8"/>
+          </svg>
+          Bug 重現與除錯詳情
+        </div>
+        <div class="form-group">
+          <label for="detail-bug-steps-input">重現步驟</label>
+          <textarea id="detail-bug-steps-input" class="form-control" rows="3" placeholder="請填寫或修改重現步驟..."></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="detail-bug-env-input">測試環境</label>
+            <input type="text" id="detail-bug-env-input" class="form-control">
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="detail-bug-severity-val">嚴重程度</label>
+            <select id="detail-bug-severity-val" class="form-control">
+              <option value="major">Major (嚴重)</option>
+              <option value="critical">Critical (致命)</option>
+              <option value="minor">Minor (輕微)</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-primary" onclick="saveBugDetailsFromDetail()" style="margin-top: 1rem;">更新 Bug 資料</button>
+      </div>
+
+      <!-- Test 專屬詳情與編輯 -->
+      <div id="detail-test-section" class="detail-section" style="display: none; border-color: rgba(14,165,233,0.2);">
+        <div class="detail-section-title" style="color: var(--info);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          測試與驗證結果
+        </div>
+        <div class="form-group">
+          <label for="detail-test-cases-input">測試案例 / 驗證清單</label>
+          <textarea id="detail-test-cases-input" class="form-control" rows="3" placeholder="測試案例內容..."></textarea>
+        </div>
+        <div class="form-group">
+          <label for="detail-test-results-input">測試結果說明</label>
+          <textarea id="detail-test-results-input" class="form-control" rows="2" placeholder="例如：測試全部通過，無殘留 Bug。"></textarea>
+        </div>
+        <button class="btn btn-sm btn-primary" onclick="saveTestDetailsFromDetail()">更新測試資料</button>
+      </div>
+
+      <!-- 任務執行進度 -->
+      <div class="detail-section" style="border-color: rgba(16, 185, 129, 0.25);">
+        <div class="detail-section-title" style="color: var(--success);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+          </svg>
+          任務執行進度 (Progress)
+        </div>
+        
+        <!-- 當前進度條 -->
+        <div style="margin-bottom: 1rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <span style="font-size: 0.9rem; color: var(--text-muted);">目前完成度：</span>
+            <span id="detail-progress-percent" style="font-weight: 600; color: var(--success); font-size: 1.1rem;">0%</span>
+          </div>
+          <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; border: 1px solid var(--border-color);">
+            <div id="detail-progress-bar" style="width: 0%; height: 100%; background: var(--success); transition: width 0.3s ease;"></div>
+          </div>
+        </div>
+
+        <!-- 填寫進度更新 (限負責此任務的 RD 與主管使用) -->
+        <div id="progress-update-input-area" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-sm); margin-bottom: 1rem; display: none;">
+          <div style="display: flex; gap: 1rem; margin-bottom: 0.75rem;">
+            <div style="flex: 1;">
+              <label for="progress-update-percent" style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">調整完成度</label>
+              <select id="progress-update-percent" class="form-control">
+                <option value="0">0%</option>
+                <option value="10">10%</option>
+                <option value="20">20%</option>
+                <option value="30">30%</option>
+                <option value="40">40%</option>
+                <option value="50">50%</option>
+                <option value="60">60%</option>
+                <option value="70">70%</option>
+                <option value="80">80%</option>
+                <option value="90">90%</option>
+                <option value="100">100%</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom: 0.75rem;">
+            <label for="progress-update-text" style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">最新進度描述說明</label>
+            <textarea id="progress-update-text" class="form-control" rows="10" style="min-height: 200px; resize: none; overflow-y: hidden;" placeholder="請詳細說明目前進度與實作細節，以便主管與團隊掌握完整狀況..." required></textarea>
+          </div>
+          <button class="btn btn-success btn-sm" onclick="submitTaskProgressUpdate()" style="width: 100%;">提交進度更新</button>
+        </div>
+
+        <!-- 歷史進度更新紀錄 -->
+        <div id="detail-progress-logs" style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 200px; overflow-y: auto;">
+          <!-- 動態生成進度時間軸 -->
+        </div>
+      </div>
+
+      <!-- 相關檔案上傳與列表 -->
+      <div class="detail-section" style="border-color: rgba(99, 102, 241, 0.25);">
+        <div class="detail-section-title" style="color: var(--primary);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+          </svg>
+          相關檔案 (Attachments)
+        </div>
+        
+        <!-- 上傳控制區 -->
+        <div class="attachment-upload-zone" id="attachment-upload-zone" ondragover="handleDragOver(event)" ondrop="handleFileDrop(event)">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom: 0.5rem; opacity: 0.7;">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+          </svg>
+          <div style="font-size: 0.85rem; color: var(--text-muted);">
+            拖曳檔案至此或 <span class="upload-link" onclick="document.getElementById('task-file-input').click()" style="color: var(--primary); cursor: pointer; text-decoration: underline; font-weight: 500;">點擊上傳</span>
+          </div>
+          <input type="file" id="task-file-input" style="display: none;" onchange="handleTaskFileSelect(event)">
+        </div>
+
+        <!-- 檔案列表 -->
+        <div class="attachments-list" id="detail-attachments-list" style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+          <!-- 檔案卡片動態置入 -->
+        </div>
+      </div>
+
+      <!-- 留言評論區 (RD 與 Manager 溝通橋樑) -->
+      <div class="detail-section">
+        <div class="detail-section-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          協同留言溝通
+        </div>
+        <div class="comments-container" id="detail-comments-list">
+          <!-- 留言 -->
+        </div>
+        <div class="comment-input-area">
+          <textarea id="comment-new-input" class="form-control" rows="3" placeholder="輸入留言與進度更新..." style="resize: none; overflow-y: hidden;"></textarea>
+          <button class="btn btn-primary" onclick="postTaskComment()">傳送</button>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 1rem;">
+        <button class="btn btn-danger btn-sm" id="btn-delete-task" onclick="deleteCurrentTask()" style="margin-right: auto; display: none;">刪除任務</button>
+        <button class="btn btn-secondary" onclick="closeModal('modal-task-detail')">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 彈出視窗 5：管理者手動新增 RD 帳號 Modal ==================== -->
+  <div class="modal-overlay" id="modal-add-rd">
+    <div class="modal-content" style="max-width: 450px;">
+      <div class="modal-header">
+        <h3 class="modal-title">手動新增 RD 研發成員</h3>
+        <button class="btn-close-modal" onclick="closeModal('modal-add-rd')">&times;</button>
+      </div>
+      <form onsubmit="handleManagerAddRd(event)">
+        <div class="form-group">
+          <label for="mgr-add-rd-name">成員姓名</label>
+          <input type="text" id="mgr-add-rd-name" class="form-control" placeholder="例如：林小華" required>
+        </div>
+        <div class="form-group">
+          <label for="mgr-add-rd-email">電子信箱</label>
+          <input type="email" id="mgr-add-rd-email" class="form-control" placeholder="name@company.com" required>
+        </div>
+        <div class="form-group">
+          <label for="mgr-add-rd-password">設定初始密碼</label>
+          <input type="password" id="mgr-add-rd-password" class="form-control" placeholder="輸入密碼 (預設為 password)" value="password" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-add-rd')">取消</button>
+          <button type="submit" class="btn btn-success">新增並建立</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== 彈出視窗 6：忘記密碼申請 Modal ==================== -->
+  <div class="modal-overlay" id="modal-forgot-password">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3 class="modal-title">忘記密碼申請</h3>
+        <button class="btn-close-modal" onclick="closeModal('modal-forgot-password')">&times;</button>
+      </div>
+      <form onsubmit="submitForgotPassword(event)">
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.4;">
+          請輸入您的帳號信箱，系統將會向您發送一封密碼重設郵件，請依郵件指示進行重設。
+        </p>
+        <div class="form-group">
+          <label for="forgot-password-email">電子信箱</label>
+          <input type="email" id="forgot-password-email" class="form-control" placeholder="name@company.com" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-forgot-password')">取消</button>
+          <button type="submit" class="btn btn-primary">送出重設信件</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== 彈出視窗 7：設定新密碼 Modal ==================== -->
+  <div class="modal-overlay" id="modal-reset-password">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3 class="modal-title">設定新密碼</h3>
+      </div>
+      <form onsubmit="submitResetPassword(event)">
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.4;">
+          您的重設身分已驗證成功。請設定並確認您的新密碼（至少 6 位字元）。
+        </p>
+        <div class="form-group">
+          <label for="reset-new-password">設定新密碼</label>
+          <input type="password" id="reset-new-password" class="form-control" placeholder="請輸入新密碼" required>
+        </div>
+        <div class="form-group">
+          <label for="reset-confirm-password">再次確認新密碼</label>
+          <input type="password" id="reset-confirm-password" class="form-control" placeholder="請再次輸入新密碼" required>
+        </div>
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-success" style="width: 100%;">確認重設密碼</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast 訊息通知區 -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Supabase JS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- JSZip Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- 引用主邏輯 JS -->
+  <script src="app.js"></script>
+</body>
+</html>
