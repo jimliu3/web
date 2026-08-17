@@ -348,12 +348,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 綁定任務留言輸入框自動高度延伸
+  // 綁定任務留言輸入框自動高度延伸與快捷鍵
   const commentInput = document.getElementById('comment-new-input');
   if (commentInput) {
     commentInput.addEventListener('input', function() {
       this.style.height = 'auto';
       this.style.height = this.scrollHeight + 'px';
+    });
+    commentInput.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        postTaskComment();
+      }
     });
   }
 });
@@ -946,7 +952,7 @@ async function renderTaskUpdateLog() {
             ${myTaskBadge}
             <span style="font-weight: 600; font-size: 0.8rem; color: var(--text-muted); cursor: pointer; text-decoration: underline;" onclick="openTaskDetailModal('${log.taskId}')">#${log.taskId.substring(0, 5).toUpperCase()}</span>
           </div>
-          <div style="color: var(--text-main); font-size: 0.9rem; line-height: 1.4;">${log.text}</div>
+          <div style="color: var(--text-main); font-size: 0.9rem; line-height: 1.4; white-space: pre-wrap; word-break: break-word;">${log.text}</div>
         </div>
       </div>
       <div class="activity-time" style="margin-top: 0.4rem;">${log.timestamp}</div>
@@ -2203,13 +2209,26 @@ async function renderComments() {
         
         const bubble = document.createElement('div');
         bubble.className = 'comment-bubble';
-        bubble.innerHTML = `
-          <div class="comment-meta">
-            <span class="comment-author">${c.sender_name}</span>
-            <span>${timeStr}</span>
-          </div>
-          <div class="comment-text">${c.text}</div>
-        `;
+
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'comment-meta';
+
+        const authorSpan = document.createElement('span');
+        authorSpan.className = 'comment-author';
+        authorSpan.textContent = c.sender_name;
+
+        const timeSpan = document.createElement('span');
+        timeSpan.textContent = timeStr;
+
+        metaDiv.appendChild(authorSpan);
+        metaDiv.appendChild(timeSpan);
+
+        const textDiv = document.createElement('div');
+        textDiv.className = 'comment-text';
+        textDiv.textContent = c.text;
+
+        bubble.appendChild(metaDiv);
+        bubble.appendChild(textDiv);
         list.appendChild(bubble);
       }
     });

@@ -869,7 +869,10 @@ select, select.form-control, select option, input, textarea {
 
 .comment-text {
   font-size: 0.85rem;
-  word-break: break-all;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .comment-input-area {
@@ -1045,6 +1048,8 @@ select, select.form-control, select option, input, textarea {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--border-color);
   font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .activity-time {
