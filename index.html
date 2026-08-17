@@ -242,6 +242,26 @@
           </div>
         </div>
 
+        <!-- 專案公佈欄 -->
+        <div id="project-announcement-banner" class="glass-card" style="margin-bottom: 1.5rem; padding: 1.25rem; border-left: 4px solid var(--primary); display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; gap: 1rem;">
+            <h3 style="margin: 0; font-size: 1.1rem; color: var(--primary); display: flex; align-items: center; gap: 0.5rem;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              專案重要公佈欄
+            </h3>
+            <button class="btn btn-sm btn-secondary" id="btn-edit-announcement" onclick="openEditAnnouncementModal()" style="display: none;">
+              編輯公佈欄
+            </button>
+          </div>
+          <div id="project-announcement-content" style="font-size: 0.95rem; line-height: 1.6; white-space: pre-wrap; color: var(--text-main);">
+            目前無公告事項。
+          </div>
+        </div>
+
         <!-- 看板 Board 4行 -->
         <div class="kanban-board">
           <!-- 待辦事項 (To Do) -->
@@ -865,6 +885,29 @@
         </div>
         <div class="modal-actions">
           <button type="submit" class="btn btn-success" style="width: 100%;">確認重設密碼</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== 彈出視窗 8：編輯專案公佈欄 Modal ==================== -->
+  <div class="modal-overlay" id="modal-edit-announcement">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 class="modal-title">編輯專案公佈欄</h3>
+        <button class="btn-close-modal" onclick="closeModal('modal-edit-announcement')">&times;</button>
+      </div>
+      <form onsubmit="handleSaveAnnouncement(event)">
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.4;">
+          您可以在此為團隊宣布重要事項，此內容將同步更新於專案看板上方。
+        </p>
+        <div class="form-group">
+          <label for="announcement-text">重要公告內容</label>
+          <textarea id="announcement-text" class="form-control" rows="8" placeholder="請輸入每週重要公告事項..." required></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('modal-edit-announcement')">取消</button>
+          <button type="submit" class="btn btn-success">更新公告</button>
         </div>
       </form>
     </div>

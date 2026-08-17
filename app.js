@@ -1317,6 +1317,22 @@ function clearProjectBoard() {
   document.getElementById('project-members-list').innerHTML = '';
   document.querySelectorAll('.column-cards').forEach(col => col.innerHTML = '');
   document.querySelectorAll('.column-count').forEach(c => c.innerText = '0');
+  const announcementBanner = document.getElementById('project-announcement-banner');
+  if (announcementBanner) {
+    announcementBanner.style.display = 'none';
+  }
+}
+
+// 解析專案詮釋資料 (公佈欄內容)
+function parseProjectMetadata(project) {
+  let description = project.description || '';
+  let announcement = '';
+  if (description.includes('\n\n[announcement]')) {
+    const parts = description.split('\n\n[announcement]');
+    description = parts[0];
+    announcement = parts[1] || '';
+  }
+  return { description, announcement };
 }
 
 // 解析任務詮釋資料 (多負責人與進度履歷)
@@ -1365,7 +1381,33 @@ async function renderProjectBoard() {
   }
 
   document.getElementById('project-board-title').innerText = `${currentProject.name} 任務看板`;
-  document.getElementById('project-desc-text').innerText = currentProject.description || '無描述';
+  
+  const { description: cleanDesc, announcement } = parseProjectMetadata(currentProject);
+  document.getElementById('project-desc-text').innerText = cleanDesc || '無描述';
+
+  // 專案公佈欄
+  const announcementBanner = document.getElementById('project-announcement-banner');
+  if (announcementBanner) {
+    announcementBanner.style.display = 'block';
+    const announcementContent = document.getElementById('project-announcement-content');
+    if (announcementContent) {
+      if (announcement && announcement.trim() !== '') {
+        announcementContent.innerText = announcement;
+      } else {
+        announcementContent.innerText = '目前無公告事項。';
+      }
+    }
+    
+    // 控制編輯按鈕顯示 (僅管理員/專案負責人可編輯)
+    const editAnnouncementBtn = document.getElementById('btn-edit-announcement');
+    if (editAnnouncementBtn) {
+      if (currentUser && (currentUser.role === 'manager' || currentUser.id === currentProject.manager_id)) {
+        editAnnouncementBtn.style.display = 'inline-block';
+      } else {
+        editAnnouncementBtn.style.display = 'none';
+      }
+    }
+  }
 
   // 抓取成員
   const { data: memberRows } = await supabaseClient
@@ -1529,6 +1571,46 @@ async function drop(e, newStatus) {
     showToast(`任務已移至 ${newStatus}`, 'success');
     await logActivity(`${currentUser.name} 將任務「${task.title}」狀態從 [${oldStatus}] 變更為 [${newStatus}]。`);
     await renderProjectBoard();
+  }
+}
+
+// 開啟編輯專案公告 Modal
+function openEditAnnouncementModal() {
+  if (!currentProject) return;
+  const { announcement } = parseProjectMetadata(currentProject);
+  document.getElementById('announcement-text').value = announcement || '';
+  document.getElementById('modal-edit-announcement').classList.add('active');
+}
+
+// 儲存專案公告
+async function handleSaveAnnouncement(e) {
+  e.preventDefault();
+  if (!supabaseClient || !currentProject) return;
+
+  const text = document.getElementById('announcement-text').value.trim();
+  const { description: cleanDesc } = parseProjectMetadata(currentProject);
+
+  let newDescription = cleanDesc;
+  if (text) {
+    newDescription += '\n\n[announcement]' + text;
+  }
+
+  const { error } = await supabaseClient
+    .from('projects')
+    .update({ description: newDescription })
+    .eq('id', currentProject.id);
+
+  if (error) {
+    showToast('更新公告失敗: ' + error.message, 'danger');
+  } else {
+    showToast('更新公告成功！', 'success');
+    closeModal('modal-edit-announcement');
+    
+    // 更新本地專案資料並重新渲染
+    currentProject.description = newDescription;
+    renderProjectBoard();
+    
+    await logActivity(`${currentUser.name} 更新了專案「${currentProject.name}」的公佈欄公告。`);
   }
 }
 
